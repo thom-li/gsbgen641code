@@ -1,6 +1,6 @@
 * load Yogurt dataset
 clear
-use "/Users/thomasli/Library/CloudStorage/OneDrive-Stanford/*Y1 GSBGEN 641/gsbgen641code/data/YogurtLong.dta"
+use "../data/YogurtLong.dta"
 
 * add variables for outside option
 rename nopurch b0
@@ -21,3 +21,9 @@ cmset choice_id brand
 * 'b' is the dependent variable (1 if chosen, 0 otherwise)
 * 'p' (price) and 'f' (feature) are alternative-specific independent variables
 cmclogit b p f
+
+* robust standard errors
+cmclogit b p f, vce(robust)
+
+*standard errors clustered by household
+cmclogit b p f, vce(cluster hh)
