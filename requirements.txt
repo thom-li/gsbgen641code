@@ -28,6 +28,8 @@ httpx==0.28.1
 idna==3.11
 ipykernel==7.2.0
 ipython==9.10.1
+jax>=0.4.26
+jaxlib>=0.4.26
 ipython_pygments_lexers==1.1.1
 ipywidgets==8.1.8
 isoduration==20.11.0
