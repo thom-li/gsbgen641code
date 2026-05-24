@@ -7,17 +7,17 @@ Eligibility:
 
 Then random sample `n_sample` users and write filtered tables without
 loading full files into memory.
+
+Raw inputs must be extracted CSV files under `raw_dir`.
 """
 
 from __future__ import annotations
 
-import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator, Optional
 
 import pandas as pd
-import py7zr
 
 
 @dataclass
@@ -56,59 +56,7 @@ class KKBoxSubsampleConfig:
         if name is None:
             return None
         p = self.path(name)
-        if p.exists():
-            return p
-        alt = self.raw_dir / f"{name}.7z"
-        if alt.exists():
-            return alt
-        return None
-
-
-def _is_7z(path: Path) -> bool:
-    return path.name.endswith(".7z")
-
-
-def _csv_path_for_archive(archive: Path) -> Path:
-    """Path to the CSV inside a .csv.7z archive (e.g. members_v3.csv.7z -> members_v3.csv)."""
-    return archive.with_name(archive.name.removesuffix(".7z"))
-
-
-def ensure_csv(path: Path) -> Path:
-    """Return a readable .csv path, extracting from .7z once with py7zr if needed."""
-    path = Path(path)
-    if not path.exists():
-        raise FileNotFoundError(path)
-    if not _is_7z(path):
-        return path
-
-    csv_path = _csv_path_for_archive(path)
-    if csv_path.exists():
-        return csv_path
-
-    print(f"Extracting {path.name} -> {csv_path.name} (one-time)...")
-    with py7zr.SevenZipFile(path, mode="r") as z:
-        inner_names = [n for n in z.getnames() if n.endswith(".csv")]
-        if len(inner_names) != 1:
-            raise RuntimeError(f"Expected one CSV in {path}, found {inner_names}")
-        inner_name = inner_names[0]
-        z.extract(path=path.parent, targets=[inner_name])
-
-    extracted = path.parent / inner_name
-    if extracted.resolve() != csv_path.resolve():
-        csv_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(extracted), str(csv_path))
-        # remove empty parent dirs left by nested archives (e.g. data/churn_comp_refresh/)
-        parent = extracted.parent
-        while parent != path.parent and parent != parent.parent:
-            try:
-                parent.rmdir()
-            except OSError:
-                break
-            parent = parent.parent
-
-    if not csv_path.exists():
-        raise FileNotFoundError(f"Expected {csv_path} after extracting {path}")
-    return csv_path
+        return p if p.exists() else None
 
 
 def iter_csv_chunks(
@@ -117,12 +65,14 @@ def iter_csv_chunks(
     chunksize: int,
     usecols: Optional[list[str]] = None,
 ) -> Iterator[pd.DataFrame]:
-    """Yield DataFrame chunks from a .csv or .csv.7z file."""
-    csv_path = ensure_csv(Path(path))
+    """Yield DataFrame chunks from a CSV file."""
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(path)
     read_kwargs = dict(chunksize=chunksize, low_memory=False)
     if usecols is not None:
         read_kwargs["usecols"] = usecols
-    yield from pd.read_csv(csv_path, **read_kwargs)
+    yield from pd.read_csv(path, **read_kwargs)
 
 
 def scan_registered_in_observation(
@@ -262,7 +212,7 @@ def extract_table_for_sample(
     *,
     chunksize: int,
 ) -> int:
-    """Stream-filter source CSV/7z to out_path; return row count written."""
+    """Stream-filter source CSV to out_path; return row count written."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
     n_rows = 0
     header_written = False
